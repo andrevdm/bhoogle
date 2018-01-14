@@ -1,19 +1,19 @@
-name:                bhoogle1
+name:                bhoogle
 version:             0.1.0.0
 -- synopsis:
 -- description:
-homepage:            https://github.com/githubuser/bhoogle1#readme
+homepage:            https://github.com/githubuser/bhoogle#readme
 license:             BSD3
 license-file:        LICENSE
-author:              Author name here
-maintainer:          example@example.com
-copyright:           2017 Author name here
-category:            Web
+author:              Andre Van Der Merwe
+maintainer:          andre@andrevdm.com
+copyright:           2017 Andre Van Der Merwe
+category:            Terminal
 build-type:          Simple
 extra-source-files:  README.md
 cabal-version:       >=1.10
 
-executable bhoogle1-exe
+executable bhoogle
   hs-source-dirs:      app
   main-is:             Main.hs
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N -Wall -Wincomplete-uni-patterns -Wincomplete-record-updates -Wimplicit-prelude
@@ -36,4 +36,4 @@ executable bhoogle1-exe
 
 source-repository head
   type:     git
-  location: https://github.com/githubuser/bhoogle1
+  location: https://github.com/githubuser/bhoogle
