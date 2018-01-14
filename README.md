@@ -19,6 +19,7 @@ bhoogle is a very simple wrapper over hoogle and a demo brick application
  1. Navigate the results by using arrow or vi (hjkl) keys
  1. Pressing **'s'** in the results list will toggle the sort order
  1. Escape to exit
+ 1. Search-ahead is enable for any type search longer than 3 characters
 
 ## Notes
  1. I'm using the latest brick at the time of writing this (0.33). See "extra-deps" in stack.yaml

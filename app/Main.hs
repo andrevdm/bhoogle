@@ -143,9 +143,8 @@ handleEvent st ev =
                 _ -> do
                   -- Let the editor handle all other events
                   r <- BE.handleEditorEvent ve $ st ^. stEditType
-                  B.continue $ st & stEditType .~ r
-                                  & stResults .~ []
-                                  & stResultsList %~ BL.listClear
+                  next <- liftIO . searchAhead $ st & stEditType .~ r 
+                  B.continue $ next
 
 
             Just TextSearch ->
@@ -182,6 +181,19 @@ handleEvent st ev =
       B.continue $ st & stTime .~ time
       
     _ -> B.continue st
+
+
+searchAhead :: BrickState -> IO BrickState
+searchAhead st =
+  let searchText = Txt.strip . Txt.concat . BE.getEditContents $ st ^. stEditType in
+  if Txt.length searchText > 3
+  then do
+    found <- liftIO $ searchHoogle (Txt.strip . Txt.concat $ BE.getEditContents (st ^. stEditType))
+    pure . filterResults $ st & stResults .~ found
+                              & stSortResults .~ SortNone
+  else
+    pure $ st & stResults .~ []
+              & stResultsList %~ BL.listClear
 
 
 -- | Filter the results from hoogle using the search text
