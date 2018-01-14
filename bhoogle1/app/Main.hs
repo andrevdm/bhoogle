@@ -10,17 +10,13 @@ import           Protolude
 import           Control.Lens ((^.), (.~), (%~))
 import           Control.Lens.TH (makeLenses)
 import qualified Data.List as Lst
-import           Data.Time (UTCTime)
 import qualified Data.Time as Tm
-import qualified Data.Time.Format as Tm
 import qualified Data.Text as Txt
 import qualified Data.Vector as Vec
 import           Brick ((<+>), (<=>))
 import qualified Brick as B
 import qualified Brick.BChan as BCh
 import qualified Brick.Focus as BF
-import qualified Brick.Markup as BM
-import           Brick.Markup ((@?))
 import qualified Brick.AttrMap as BA
 import qualified Brick.Widgets.List as BL
 import qualified Brick.Widgets.Edit as BE
@@ -32,7 +28,7 @@ import qualified Graphics.Vty.Input.Events as K
 import qualified Hoogle as H
 
 
-newtype Event = EventTick UTCTime
+newtype Event = EventTick Tm.LocalTime
 
 data Name = TypeSearch
           | TextSearch
@@ -46,10 +42,10 @@ data SortBy = SortNone
 
 data BrickState = BrickState { _stEditType :: !(BE.Editor Text Name)
                              , _stEditText :: !(BE.Editor Text Name)
-                             , _stTime :: !UTCTime
+                             , _stTime :: !Tm.LocalTime
                              , _stFocus :: !(BF.FocusRing Name)
-                             , _stResults :: [Text]
-                             , _stResultsList :: !(BL.List Name Text)
+                             , _stResults :: [H.Target]
+                             , _stResultsList :: !(BL.List Name H.Target)
                              , _stSortResults :: SortBy
                              }
 
@@ -66,20 +62,20 @@ app = B.App { B.appDraw = drawUI
 
 main :: IO ()
 main = do
-  chan <- BCh.newBChan 10
+  chan <- BCh.newBChan 5
 
   -- Send a tick event every 1 seconds
   void . forkIO $ forever $ do
-    t <- Tm.getCurrentTime
+    t <- getTime 
     BCh.writeBChan chan $ EventTick t
     threadDelay $ 1 * 1000000
 
-  dt <- Tm.getCurrentTime
+  t <- getTime
 
   let st = BrickState { _stEditType = BE.editor TypeSearch (Just 1) ""
                       , _stEditText = BE.editor TextSearch (Just 1) ""
                       , _stResultsList = BL.list ListResults Vec.empty 1
-                      , _stTime = dt
+                      , _stTime = t
                       , _stFocus = BF.focusRing [TypeSearch, TextSearch, ListResults]
                       , _stResults = []
                       , _stSortResults = SortNone
@@ -87,10 +83,15 @@ main = do
           
   void $ B.customMain (V.mkVty V.defaultConfig) (Just chan) app st
 
+  where
+    getTime = do
+      t <- Tm.getCurrentTime
+      tz <- Tm.getCurrentTimeZone
+      pure $ Tm.utcToLocalTime tz t
+
 
 handleEvent :: BrickState -> B.BrickEvent Name Event -> B.EventM Name (B.Next BrickState)
 handleEvent st ev =
-
   case ev of
     (B.VtyEvent ve@(V.EvKey k ms)) ->
       case (k, ms) of
@@ -115,6 +116,7 @@ handleEvent st ev =
                   found <- liftIO $ searchHoogle (Txt.strip . Txt.concat $ BE.getEditContents (st ^. stEditType))
                   B.continue . updateResults $ st & stResults .~ found
                                                   & stSortResults .~ SortNone
+                                                  & stFocus %~ BF.focusSetCurrent ListResults
 
                 _ -> do
                   r <- BE.handleEditorEvent ve $ st ^. stEditType
@@ -134,7 +136,7 @@ handleEvent st ev =
                 K.KBackTab -> B.continue $ st & stFocus %~ BF.focusPrev
                 K.KChar 's' ->
                   let sortDir = if (st ^. stSortResults) == SortAsc then SortDec else SortAsc in
-                  let sorter = if sortDir == SortDec then (Lst.sortBy $ flip compare) else Lst.sort in
+                  let sorter = if sortDir == SortDec then (Lst.sortBy $ flip compareType) else (Lst.sortBy compareType) in
                   B.continue . updateResults $ st & stResults %~ sorter
                                                   & stSortResults .~ sortDir
 
@@ -158,7 +160,7 @@ updateResults st =
   let results =
         if Txt.null filterText
         then allResults
-        else filter (\t -> Txt.isInfixOf filterText $ Txt.toLower t) allResults
+        else filter (\t -> Txt.isInfixOf filterText . Txt.toLower $ formatResult t) allResults
   in
   st & stResultsList .~ BL.list ListResults (Vec.fromList results) 1
   
@@ -169,24 +171,51 @@ drawUI st =
 
   where
     contentBlock =
-      searchBlock
+      (B.withBorderStyle BBS.unicode $ BB.border searchBlock)
       <=>
       B.padTop (B.Pad 1) resultsBlock
       
     resultsBlock =
-      B.txt ("Results: " <> (show . length $ st ^. stResultsList ^. BL.listElementsL) <> "/" <> (show . length $ st ^. stResults))
+      let total = show . length $ st ^. stResults in
+      let showing = show . length $ st ^. stResultsList ^. BL.listElementsL in
+      (B.withAttr "infoTitle" $ B.txt "Results: ") <+> B.txt (showing <> "/" <> total)
       <=>
-      ( B.padAll 1 $
-        BL.renderList (\_ e -> B.txt e) False (st ^. stResultsList)
+      (B.padTop (B.Pad 1) $
+       resultsContent <+> resultsDetail
       )
+
+    resultsContent =
+      BL.renderList (\_ e -> B.txt $ formatResult e) False (st ^. stResultsList)
+
+    resultsDetail =
+      B.padLeft (B.Pad 1) $
+      B.hLimit 60 $
+      vtitle "package:"
+      <=>
+      B.padLeft (B.Pad 2) (B.txt $ getSelectedDetail (\t -> maybe "" (Txt.pack . fst) (H.targetPackage t)))
+      <=>
+      vtitle "module:"
+      <=>
+      B.padLeft (B.Pad 2) (B.txt $ getSelectedDetail (\t -> maybe "" (Txt.pack . fst) (H.targetModule t)))
+      <=>
+      vtitle "docs:"
+      <=>
+      B.padLeft (B.Pad 2) (B.txt $ getSelectedDetail (Txt.pack . clean . H.targetDocs))
+      <=>
+      B.fill ' '
   
     searchBlock =
-      ((title "Type: " <+> editor TypeSearch (st ^. stEditType)) <+> time (st ^. stTime))
+      ((htitle "Type: " <+> editor TypeSearch (st ^. stEditType)) <+> time (st ^. stTime))
       <=>
-      (title "Text: " <+> editor TextSearch (st ^. stEditText))
+      (htitle "Text: " <+> editor TextSearch (st ^. stEditText))
 
-    title t =
+    htitle t =
       B.hLimit 20 $
+      B.withAttr "infoTitle" $
+      B.txt t
+      
+    vtitle t =
+      B.withAttr "infoTitle" $
       B.txt t
 
     editor n e =
@@ -195,9 +224,14 @@ drawUI st =
 
     time t =
       B.padLeft (B.Pad 1) $
-      B.hLimit 40 $
+      B.hLimit 20 $
+      B.withAttr "time" $
       B.str (Tm.formatTime Tm.defaultTimeLocale "%H-%M-%S" t)
 
+    getSelectedDetail fn =
+      case BL.listSelectedElement $ st ^. stResultsList of
+        Nothing -> ""
+        Just (_, e) -> fn e
 
 
 theMap :: BA.AttrMap
@@ -205,14 +239,21 @@ theMap = BA.attrMap V.defAttr [ (BE.editAttr        , V.black `B.on` V.cyan)
                               , (BE.editFocusedAttr , V.black `B.on` V.yellow)
                               , (BL.listAttr        , V.white `B.on` V.blue)
                               , (BL.listSelectedAttr, V.blue `B.on` V.white)
+                              , ("infoTitle"        , B.fg V.cyan)
+                              , ("time"             , B.fg V.yellow)
                               ]
 
 
 ----------------------------------------------------------------------------------------------
-searchHoogle :: Text -> IO [Text]
+compareType :: H.Target -> H.Target -> Ordering
+compareType a b =
+  compare (formatResult a) (formatResult b)
+
+  
+searchHoogle :: Text -> IO [H.Target]
 searchHoogle f = do
   d <- H.defaultDatabaseLocation 
-  H.withDatabase d (\x -> pure $ formatResult <$> H.searchDatabase x (Txt.unpack f))
+  H.withDatabase d (\x -> pure $ H.searchDatabase x (Txt.unpack f))
   
 
 formatResult :: H.Target -> Text
@@ -225,6 +266,7 @@ formatResult t =
 clean :: [Char] -> [Char]
 clean = unescapeHTML . stripTags
 
+
 -- | From hoogle source: https://hackage.haskell.org/package/hoogle-5.0.16/docs/src/General-Util.html
 unescapeHTML :: [Char] -> [Char]
 unescapeHTML ('&':xs)
@@ -235,6 +277,7 @@ unescapeHTML ('&':xs)
 unescapeHTML (x:xs) = x : unescapeHTML xs
 unescapeHTML [] = []
   
+
 -- | From hakyll source: https://hackage.haskell.org/package/hakyll-4.1.2.1/docs/src/Hakyll-Web-Html.html#stripTags
 stripTags :: [Char] -> [Char]
 stripTags []         = []
