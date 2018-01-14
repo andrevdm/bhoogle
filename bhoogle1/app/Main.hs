@@ -1,8 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TemplateHaskell #-}
-
 
 module Main where
 
@@ -28,29 +26,37 @@ import qualified Graphics.Vty.Input.Events as K
 import qualified Hoogle as H
 
 
-newtype Event = EventTick Tm.LocalTime
+-- | Events that can be sent
+-- | Here there is just one event for updating the time
+newtype Event = EventUpdateTime Tm.LocalTime
 
+-- | Names use to identify each of the controls
 data Name = TypeSearch
           | TextSearch
           | ListResults
           deriving (Show, Eq, Ord)
 
+-- | Sort order
 data SortBy = SortNone
             | SortAsc
             | SortDec
             deriving (Eq)
 
-data BrickState = BrickState { _stEditType :: !(BE.Editor Text Name)
-                             , _stEditText :: !(BE.Editor Text Name)
-                             , _stTime :: !Tm.LocalTime
-                             , _stFocus :: !(BF.FocusRing Name)
-                             , _stResults :: [H.Target]
-                             , _stResultsList :: !(BL.List Name H.Target)
-                             , _stSortResults :: SortBy
+
+-- | State of the brick app. Contains the controls and any other required state
+data BrickState = BrickState { _stEditType :: !(BE.Editor Text Name) -- ^ Editor for the type to search for
+                             , _stEditText :: !(BE.Editor Text Name) -- ^ Editor for a text search in the results
+                             , _stTime :: !Tm.LocalTime              -- ^ The current time
+                             , _stFocus :: !(BF.FocusRing Name)      -- ^ Focus ring - a circular list of focusable controls
+                             , _stResults :: [H.Target]              -- ^ The last set of search results from hoohle
+                             , _stResultsList :: !(BL.List Name H.Target) -- ^ List for the search results
+                             , _stSortResults :: SortBy                   -- ^ Current sort order for the results
                              }
 
 makeLenses ''BrickState
 
+
+-- | Defines how the brick application will work / handle events
 app :: B.App BrickState Event Name
 app = B.App { B.appDraw = drawUI
             , B.appChooseCursor = B.showFirstCursor
@@ -62,16 +68,19 @@ app = B.App { B.appDraw = drawUI
 
 main :: IO ()
 main = do
-  chan <- BCh.newBChan 5
+  chan <- BCh.newBChan 5 -- ^ create a bounded channel for events
 
-  -- Send a tick event every 1 seconds
+  -- Send a tick event every 1 seconds with the current time
+  -- Brick will send this to our event handler which can then update the stTime field
   void . forkIO $ forever $ do
     t <- getTime 
-    BCh.writeBChan chan $ EventTick t
+    BCh.writeBChan chan $ EventUpdateTime t
     threadDelay $ 1 * 1000000
 
+  -- Initial current time value
   t <- getTime
 
+  -- Construct the initial state values
   let st = BrickState { _stEditType = BE.editor TypeSearch (Just 1) ""
                       , _stEditText = BE.editor TextSearch (Just 1) ""
                       , _stResultsList = BL.list ListResults Vec.empty 1
@@ -81,79 +90,100 @@ main = do
                       , _stSortResults = SortNone
                       }
           
+  -- And run brick
   void $ B.customMain (V.mkVty V.defaultConfig) (Just chan) app st
 
   where
+    -- | Get the local time
     getTime = do
       t <- Tm.getCurrentTime
       tz <- Tm.getCurrentTimeZone
       pure $ Tm.utcToLocalTime tz t
 
 
+-- | Main even handler for brick events
 handleEvent :: BrickState -> B.BrickEvent Name Event -> B.EventM Name (B.Next BrickState)
 handleEvent st ev =
   case ev of
+    -- Handle keyboard events
+    --   k is the key
+    --   ms are the modifier keys
     (B.VtyEvent ve@(V.EvKey k ms)) ->
       case (k, ms) of
+        -- Escape quits the app, no matter what control has focus
         (K.KEsc, []) -> B.halt st
+
         _ ->
+          -- How to interpret the key press depends on which control is focused
           case BF.focusGetCurrent $ st ^. stFocus of
             Just TypeSearch ->
               case k of
                 K.KChar '\t' -> do
+                  -- Search, clear sort order, focus next
                   found <- liftIO $ searchHoogle (Txt.strip . Txt.concat $ BE.getEditContents (st ^. stEditType))
-                  B.continue . updateResults $ st & stFocus %~ BF.focusNext
+                  B.continue . filterResults $ st & stFocus %~ BF.focusNext
                                                   & stResults .~ found
                                                   & stSortResults .~ SortNone
 
                 K.KBackTab ->do
+                  -- Search, clear sort order, focus prev
                   found <- liftIO $ searchHoogle (Txt.strip . Txt.concat $ BE.getEditContents (st ^. stEditType))
-                  B.continue  . updateResults $ st & stFocus %~ BF.focusPrev
+                  B.continue  . filterResults $ st & stFocus %~ BF.focusPrev
                                                    & stResults .~ found
                                                    & stSortResults .~ SortNone
 
                 K.KEnter -> do
+                  -- Search, clear sort order, focus on results
+                  --  This makes it faster if you want to search and navigate results without tabing through the text search box
                   found <- liftIO $ searchHoogle (Txt.strip . Txt.concat $ BE.getEditContents (st ^. stEditType))
-                  B.continue . updateResults $ st & stResults .~ found
+                  B.continue . filterResults $ st & stResults .~ found
                                                   & stSortResults .~ SortNone
                                                   & stFocus %~ BF.focusSetCurrent ListResults
 
                 _ -> do
+                  -- Let the editor handle all other events
                   r <- BE.handleEditorEvent ve $ st ^. stEditType
                   B.continue $ st & stEditType .~ r
 
             Just TextSearch ->
               case k of
-                K.KChar '\t' -> B.continue $ st & stFocus %~ BF.focusNext
-                K.KBackTab -> B.continue $ st & stFocus %~ BF.focusPrev
+                K.KChar '\t' -> B.continue $ st & stFocus %~ BF.focusNext -- Focus next
+                K.KBackTab -> B.continue $ st & stFocus %~ BF.focusPrev   -- Focus previous
                 _ -> do
+                  -- Let the editor handle all other events
                   r <- BE.handleEditorEvent ve $ st ^. stEditText
-                  B.continue . updateResults $ st & stEditText .~ r
+                  B.continue . filterResults $ st & stEditText .~ r
 
             Just ListResults ->
               case k of
-                K.KChar '\t' -> B.continue $ st & stFocus %~ BF.focusNext
-                K.KBackTab -> B.continue $ st & stFocus %~ BF.focusPrev
+                K.KChar '\t' -> B.continue $ st & stFocus %~ BF.focusNext -- Focus next
+                K.KBackTab -> B.continue $ st & stFocus %~ BF.focusPrev   -- Focus previous
                 K.KChar 's' ->
+                  -- Toggle the search order between ascending and descending, use asc if sort order was 'none'
                   let sortDir = if (st ^. stSortResults) == SortAsc then SortDec else SortAsc in
                   let sorter = if sortDir == SortDec then (Lst.sortBy $ flip compareType) else (Lst.sortBy compareType) in
-                  B.continue . updateResults $ st & stResults %~ sorter
+                  B.continue . filterResults $ st & stResults %~ sorter
                                                   & stSortResults .~ sortDir
 
                 _ -> do
+                  -- Let the list handle all other events
+                  -- Using handleListEventVi which adds vi-style keybindings for navigation
+                  --  and the standard handleListEvent as a fallback for all other events
                   r <- BL.handleListEventVi BL.handleListEvent ve $ st ^. stResultsList
                   B.continue $ st & stResultsList .~ r
 
             _ -> B.continue st
 
-    (B.AppEvent (EventTick time)) ->
+    (B.AppEvent (EventUpdateTime time)) ->
+      -- Update the time in the state
       B.continue $ st & stTime .~ time
       
     _ -> B.continue st
 
 
-updateResults :: BrickState -> BrickState
-updateResults st =
+-- | Filter the results from hoogle using the search text
+filterResults :: BrickState -> BrickState
+filterResults st =
   let allResults = st ^. stResults in
   let filterText = Txt.toLower . Txt.strip . Txt.concat . BE.getEditContents $ st ^. stEditText in
 
@@ -165,6 +195,7 @@ updateResults st =
   st & stResultsList .~ BL.list ListResults (Vec.fromList results) 1
   
 
+-- | Draw the UI
 drawUI :: BrickState -> [B.Widget Name]
 drawUI st =
   [B.padAll 1 contentBlock] 
@@ -245,17 +276,20 @@ theMap = BA.attrMap V.defAttr [ (BE.editAttr        , V.black `B.on` V.cyan)
 
 
 ----------------------------------------------------------------------------------------------
+-- | Compare two hoogle results for sorting
 compareType :: H.Target -> H.Target -> Ordering
 compareType a b =
   compare (formatResult a) (formatResult b)
 
   
+-- | Search hoogle using the default hoogle database
 searchHoogle :: Text -> IO [H.Target]
 searchHoogle f = do
   d <- H.defaultDatabaseLocation 
   H.withDatabase d (\x -> pure $ H.searchDatabase x (Txt.unpack f))
   
 
+-- | Format the hoogle results so they roughly match what the terminal app would show
 formatResult :: H.Target -> Text
 formatResult t =
   let typ = clean $ H.targetItem t in
