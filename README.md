@@ -4,6 +4,13 @@ bhoogle is a very simple wrapper over hoogle and a demo brick application
 
 ![ui](ui.png)
 
+
+## Setup
+ - Make sure you have a local hoogle database created
+ - If you don't do this
+   1. Install hoogle (e.g. ```stack install hoogle```)
+   1. Generate the default database (```hoogle generate```)
+
 ## Usage
  1. Enter a search in the "type" edit box
  1. Press enter to search: focus goes directly to the results list
