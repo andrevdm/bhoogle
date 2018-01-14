@@ -144,6 +144,9 @@ handleEvent st ev =
                   -- Let the editor handle all other events
                   r <- BE.handleEditorEvent ve $ st ^. stEditType
                   B.continue $ st & stEditType .~ r
+                                  & stResults .~ []
+                                  & stResultsList %~ BL.listClear
+
 
             Just TextSearch ->
               case k of
