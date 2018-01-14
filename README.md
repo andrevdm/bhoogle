@@ -10,4 +10,5 @@ bhoogle is a very simple wrapper over hoogle and a demo brick application
  1. Or press tab to search and focus will go to the "text" edit box
  1. You can then filter the results by typing in the "text" edit box, any result containing the sub-string typed will be shown
  1. Navigate the results by using arrow or vi (hjkl) keys
+ 1. Pressing **'s'** in the results list will toggle the sort order
  1. Escape to exit
