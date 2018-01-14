@@ -120,14 +120,14 @@ handleEvent st ev =
               case k of
                 K.KChar '\t' -> do
                   -- Search, clear sort order, focus next
-                  found <- liftIO $ searchHoogle (Txt.strip . Txt.concat $ BE.getEditContents (st ^. stEditType))
+                  found <- doSearch st
                   B.continue . filterResults $ st & stFocus %~ BF.focusNext
                                                   & stResults .~ found
                                                   & stSortResults .~ SortNone
 
                 K.KBackTab ->do
                   -- Search, clear sort order, focus prev
-                  found <- liftIO $ searchHoogle (Txt.strip . Txt.concat $ BE.getEditContents (st ^. stEditType))
+                  found <- doSearch st
                   B.continue  . filterResults $ st & stFocus %~ BF.focusPrev
                                                    & stResults .~ found
                                                    & stSortResults .~ SortNone
@@ -135,7 +135,7 @@ handleEvent st ev =
                 K.KEnter -> do
                   -- Search, clear sort order, focus on results
                   --  This makes it faster if you want to search and navigate results without tabing through the text search box
-                  found <- liftIO $ searchHoogle (Txt.strip . Txt.concat $ BE.getEditContents (st ^. stEditType))
+                  found <- doSearch st
                   B.continue . filterResults $ st & stResults .~ found
                                                   & stSortResults .~ SortNone
                                                   & stFocus %~ BF.focusSetCurrent ListResults
@@ -143,8 +143,8 @@ handleEvent st ev =
                 _ -> do
                   -- Let the editor handle all other events
                   r <- BE.handleEditorEvent ve $ st ^. stEditType
-                  next <- liftIO . searchAhead $ st & stEditType .~ r 
-                  B.continue $ next
+                  next <- liftIO . searchAhead doSearch $ st & stEditType .~ r 
+                  B.continue next
 
 
             Just TextSearch ->
@@ -182,16 +182,24 @@ handleEvent st ev =
       
     _ -> B.continue st
 
+  where
+    doSearch st' = 
+      liftIO $ searchHoogle (Txt.strip . Txt.concat $ BE.getEditContents (st' ^. stEditType))
 
-searchAhead :: BrickState -> IO BrickState
-searchAhead st =
+
+-- | Search ahead for type strings longer than 3 chars.
+searchAhead :: (BrickState -> IO [H.Target]) -> BrickState -> IO BrickState
+searchAhead search st =
   let searchText = Txt.strip . Txt.concat . BE.getEditContents $ st ^. stEditType in
+
   if Txt.length searchText > 3
   then do
-    found <- liftIO $ searchHoogle (Txt.strip . Txt.concat $ BE.getEditContents (st ^. stEditType))
+    -- Search
+    found <- search st
     pure . filterResults $ st & stResults .~ found
                               & stSortResults .~ SortNone
   else
+    -- Just clear
     pure $ st & stResults .~ []
               & stResultsList %~ BL.listClear
 
