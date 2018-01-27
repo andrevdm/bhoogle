@@ -1,6 +1,6 @@
-# Hoogle example UI built with brick
+# Hoogle terminal GUI.
 
-bhoogle is a very simple wrapper over hoogle and a demo brick application
+**bhoogle** is a simple terminal GUI wrapper over [hoogle](https://hackage.haskell.org/package/hoogle). 
 
 Note that the version described on the [blog](http://www.andrevdm.com/posts/2018-01-15-bhoogle.html) is on the [blog](https://github.com/andrevdm/bhoogle/tree/blog) branch.
 
@@ -10,7 +10,7 @@ Note that the version described on the [blog](http://www.andrevdm.com/posts/2018
 ## Setup
  - Make sure you have a local hoogle database created
  - If you don't already, then
-   1. Install hoogle (e.g. ```stack install hoogle```)
+   1. Install hoogle (e.g. ```stack install hoogle``` or ```cabal install hoogle```)
    1. Generate the default database (```hoogle generate```)
 
 ## Usage
@@ -21,7 +21,4 @@ Note that the version described on the [blog](http://www.andrevdm.com/posts/2018
  1. Navigate the results by using arrow or vi (hjkl) keys
  1. Pressing **'s'** in the results list will toggle the sort order
  1. Escape to exit
- 1. Search-ahead is enable for any type search longer than 3 characters
-
-## Notes
- 1. I'm using the latest brick at the time of writing this (0.33). See "extra-deps" in stack.yaml
+ 1. Search-ahead is enable for any type search longer than ~3 characters
