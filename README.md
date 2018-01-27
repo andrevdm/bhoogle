@@ -2,9 +2,9 @@
 
 bhoogle is a very simple wrapper over hoogle and a demo brick application
 
-Note that the version described in the [blog](http://www.andrevdm.com/posts/2018-01-15-bhoogle.html) is on the [blog](https://github.com/andrevdm/bhoogle/tree/blog) branch.
+Note that the version described on the [blog](http://www.andrevdm.com/posts/2018-01-15-bhoogle.html) is on the [blog](https://github.com/andrevdm/bhoogle/tree/blog) branch.
 
-![ui](ui.png)
+![ui](http://www.andrevdm.com/images/bhoogle.png)
 
 
 ## Setup
