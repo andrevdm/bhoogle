@@ -138,7 +138,8 @@ handleEvent st ev =
                   found <- doSearch st
                   B.continue . filterResults $ st & stResults .~ found
                                                   & stSortResults .~ SortNone
-                                                  & stFocus %~ BF.focusSetCurrent ListResults
+                                                  & stFocus %~ BF.focusNext & stFocus %~ BF.focusNext
+                                                  -- TODO with brick >= 0.33, rather than 2x focus next: & stFocus %~ BF.focusSetCurrent ListResults
 
                 _ -> do
                   -- Let the editor handle all other events
