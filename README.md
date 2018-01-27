@@ -2,6 +2,8 @@
 
 bhoogle is a very simple wrapper over hoogle and a demo brick application
 
+Note that the version described on the blog is in the **blog** branch.
+
 ![ui](ui.png)
 
 
