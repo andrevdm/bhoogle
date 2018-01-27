@@ -26,6 +26,7 @@ import qualified Graphics.Vty.Input.Events as K
 import qualified Hoogle as H
 
 
+
 -- | Events that can be sent
 -- | Here there is just one event for updating the time
 newtype Event = EventUpdateTime Tm.LocalTime
@@ -193,7 +194,7 @@ searchAhead :: (BrickState -> IO [H.Target]) -> BrickState -> IO BrickState
 searchAhead search st =
   let searchText = Txt.strip . Txt.concat . BE.getEditContents $ st ^. stEditType in
 
-  if Txt.length searchText > 3
+  if Txt.length (Txt.filter (`notElem` [' ', '\t', '(', ')', '=']) searchText) > 3
   then do
     -- Search
     found <- search st
