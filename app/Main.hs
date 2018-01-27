@@ -1,6 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Main where
 
@@ -23,6 +24,7 @@ import qualified Brick.Widgets.Border.Style as BBS
 import           Control.Concurrent (threadDelay, forkIO)
 import qualified Graphics.Vty as V
 import qualified Graphics.Vty.Input.Events as K
+import qualified System.Directory as Dir
 import qualified Hoogle as H
 
 
@@ -69,6 +71,21 @@ app = B.App { B.appDraw = drawUI
 
 main :: IO ()
 main = do
+  dbPath <- H.defaultDatabaseLocation
+  Dir.doesFileExist dbPath >>= \case
+    True -> runBHoogle
+    False -> do
+      putText ""
+      putText "bhoogle error: "
+      putText "   default hoogle database not found"
+      putText $ "     at " <> Txt.pack dbPath
+      putText "   You can create the database by installing hoogle and running"
+      putText "     hoogle generate"
+      putText ""
+
+ 
+runBHoogle :: IO ()
+runBHoogle = do
   chan <- BCh.newBChan 5 -- ^ create a bounded channel for events
 
   -- Send a tick event every 1 seconds with the current time
