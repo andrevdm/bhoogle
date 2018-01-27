@@ -256,7 +256,7 @@ drawUI st =
       <=>
       vtitle "docs:"
       <=>
-      B.padLeft (B.Pad 2) (B.txt $ getSelectedDetail (Txt.pack . clean . H.targetDocs))
+      B.padLeft (B.Pad 2) (B.txtWrap . reflow $ getSelectedDetail (Txt.pack . clean . H.targetDocs))
       <=>
       B.fill ' '
   
@@ -288,6 +288,11 @@ drawUI st =
       case BL.listSelectedElement $ st ^. stResultsList of
         Nothing -> ""
         Just (_, e) -> fn e
+
+
+-- | Reformat the text so that it can be wrapped nicely
+reflow :: Text -> Text
+reflow = Txt.replace "\0" "\n\n" . Txt.replace "\n" "" . Txt.replace "\n\n" "\0" 
 
 
 theMap :: BA.AttrMap
