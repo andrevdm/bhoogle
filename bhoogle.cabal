@@ -1,14 +1,14 @@
 name:                bhoogle
-version:             0.1.1.0
--- synopsis:
--- description:
+version:             0.1.1.1
+synopsis:            Simple terminal GUI for local hoogle.
+description:         bhoogle is a terminal GUI layer over local hoogle. It provides search ahead and sub-string filtering in addition to the usual type-search.
 homepage:            https://github.com/githubuser/bhoogle#readme
 license:             BSD3
 license-file:        LICENSE
 author:              Andre Van Der Merwe
 maintainer:          andre@andrevdm.com
 copyright:           2017 Andre Van Der Merwe
-category:            Terminal
+category:            Development, Terminal
 build-type:          Simple
 extra-source-files:  README.md
 cabal-version:       >=1.10
@@ -17,7 +17,7 @@ executable bhoogle
   hs-source-dirs:      app
   main-is:             Main.hs
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N -Wall -Wincomplete-uni-patterns -Wincomplete-record-updates -Wimplicit-prelude
-  build-depends:       base
+  build-depends:       base >=4.7 && <5
                      , protolude
                      , text
                      , containers
