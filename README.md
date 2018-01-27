@@ -2,7 +2,6 @@
 
 **bhoogle** is a simple terminal GUI wrapper over [hoogle](https://hackage.haskell.org/package/hoogle). 
 
-Note that the version described on the [blog](http://www.andrevdm.com/posts/2018-01-15-bhoogle.html) is on the [blog](https://github.com/andrevdm/bhoogle/tree/blog) branch.
 
 ![ui](http://www.andrevdm.com/images/bhoogle.png)
 
@@ -22,3 +21,6 @@ Note that the version described on the [blog](http://www.andrevdm.com/posts/2018
  1. Pressing **'s'** in the results list will toggle the sort order
  1. Escape to exit
  1. Search-ahead is enable for any type search longer than ~3 characters
+
+
+Note that the version described in the [blog](http://www.andrevdm.com/posts/2018-01-15-bhoogle.html) is on the [blog](https://github.com/andrevdm/bhoogle/tree/blog) branch.
