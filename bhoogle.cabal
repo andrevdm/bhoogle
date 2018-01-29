@@ -1,5 +1,5 @@
 name:                bhoogle
-version:             0.1.2.1
+version:             0.1.2.2
 synopsis:            Simple terminal GUI for local hoogle.
 description:         bhoogle is a terminal GUI layer over local hoogle. It provides search ahead and sub-string filtering in addition to the usual type-search.
 homepage:            https://github.com/githubuser/bhoogle#readme
@@ -17,22 +17,20 @@ executable bhoogle
   hs-source-dirs:      app
   main-is:             Main.hs
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N -Wall -Wincomplete-uni-patterns -Wincomplete-record-updates -Wimplicit-prelude
-  build-depends:       base >=4.7 && <5
-                     , protolude
-                     , text
-                     , containers
-                     , brick
-                     , safe-exceptions
-                     , filepath
-                     , directory
-                     , vty
-                     , vector
-                     , process
-                     , lens
-                     , bytestring
-                     , time
-                     , hoogle
-                     , directory
+  build-depends:       base >=4.8 && <5
+                     , protolude >= 0.2
+                     , text >= 1.2.2
+                     , containers >= 0.5.7.1
+                     , brick >= 0.29.1
+                     , filepath >= 1.4.1.1
+                     , directory >= 1.3.0.0
+                     , vty >= 5.18.1
+                     , vector >= 0.12.0.1
+                     , process >= 1.4.3.0
+                     , lens >= 4.15
+                     , bytestring >= 0.10.8.1
+                     , time >= 1.6.0.1
+                     , hoogle >= 5.0.14
   default-language:    Haskell2010
 
 source-repository head
