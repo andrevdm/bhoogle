@@ -24,6 +24,8 @@ import qualified Brick.Widgets.Border.Style as BBS
 import           Control.Concurrent (threadDelay, forkIO)
 import qualified Graphics.Vty as V
 import qualified Graphics.Vty.Input.Events as K
+import           System.FilePath ((</>))
+import qualified System.FilePath as FP
 import qualified System.Directory as Dir
 import qualified Hoogle as H
 
@@ -54,6 +56,7 @@ data BrickState = BrickState { _stEditType :: !(BE.Editor Text Name) -- ^ Editor
                              , _stResults :: [H.Target]              -- ^ The last set of search results from hoohle
                              , _stResultsList :: !(BL.List Name H.Target) -- ^ List for the search results
                              , _stSortResults :: SortBy                   -- ^ Current sort order for the results
+                             , _stDbPath :: FilePath                      -- ^ Hoogle DB path
                              }
 
 makeLenses ''BrickState
@@ -71,21 +74,34 @@ app = B.App { B.appDraw = drawUI
 
 main :: IO ()
 main = do
+  -- Try use the default hoogle DB. This may not exist because
+  --  1) hoogle generate was never called
+  --  2) the system hoogle is a different version from the package used here
   dbPath <- H.defaultDatabaseLocation
   Dir.doesFileExist dbPath >>= \case
-    True -> runBHoogle
+    True -> runBHoogle dbPath
     False -> do
-      putText ""
-      putText "bhoogle error: "
-      putText "   default hoogle database not found"
-      putText $ "     at " <> Txt.pack dbPath
-      putText "   You can create the database by installing hoogle and running"
-      putText "     hoogle generate"
-      putText ""
+      -- Try find the latest "hoo" DB in the default path
+      let root = FP.takeDirectory dbPath
+      files <- Txt.pack <<$>> getFiles root
+      let hoos = filter (Txt.isSuffixOf ".hoo") files
+
+      case sortBy (flip compare) hoos of
+        (path:_) -> runBHoogle $ Txt.unpack path
+        _ -> do
+          putText ""
+          putText "bhoogle error: "
+          putText "   default hoogle database not found"
+          putText $ "     at " <> Txt.pack dbPath
+          putText "   You can create the database by installing hoogle and running"
+          putText "     hoogle generate"
+          putText ""
 
  
-runBHoogle :: IO ()
-runBHoogle = do
+runBHoogle :: FilePath -> IO ()
+runBHoogle dbPath = do
+  print dbPath
+  
   chan <- BCh.newBChan 5 -- ^ create a bounded channel for events
 
   -- Send a tick event every 1 seconds with the current time
@@ -106,6 +122,7 @@ runBHoogle = do
                       , _stFocus = BF.focusRing [TypeSearch, TextSearch, ListResults]
                       , _stResults = []
                       , _stSortResults = SortNone
+                      , _stDbPath = dbPath
                       }
           
   -- And run brick
@@ -203,7 +220,7 @@ handleEvent st ev =
 
   where
     doSearch st' = 
-      liftIO $ searchHoogle (Txt.strip . Txt.concat $ BE.getEditContents (st' ^. stEditType))
+      liftIO $ searchHoogle (st' ^. stDbPath) (Txt.strip . Txt.concat $ BE.getEditContents (st' ^. stEditType))
 
 
 -- | Search ahead for type strings longer than 3 chars.
@@ -322,6 +339,11 @@ theMap = BA.attrMap V.defAttr [ (BE.editAttr        , V.black `B.on` V.cyan)
                               ]
 
 
+getFiles :: FilePath -> IO [FilePath]
+getFiles p = do
+  entries <- (p </>) <<$>> (Dir.listDirectory p)
+  filterM Dir.doesFileExist entries
+
 ----------------------------------------------------------------------------------------------
 -- | Compare two hoogle results for sorting
 compareType :: H.Target -> H.Target -> Ordering
@@ -330,10 +352,9 @@ compareType a b =
 
   
 -- | Search hoogle using the default hoogle database
-searchHoogle :: Text -> IO [H.Target]
-searchHoogle f = do
-  d <- H.defaultDatabaseLocation 
-  H.withDatabase d (\x -> pure $ H.searchDatabase x (Txt.unpack f))
+searchHoogle :: FilePath -> Text -> IO [H.Target]
+searchHoogle path f = do
+  H.withDatabase path (\x -> pure $ H.searchDatabase x (Txt.unpack f))
   
 
 -- | Format the hoogle results so they roughly match what the terminal app would show
@@ -364,3 +385,4 @@ stripTags :: [Char] -> [Char]
 stripTags []         = []
 stripTags ('<' : xs) = stripTags $ drop 1 $ dropWhile (/= '>') xs
 stripTags (x : xs)   = x : stripTags xs
+
