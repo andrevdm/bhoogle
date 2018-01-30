@@ -100,8 +100,6 @@ main = do
  
 runBHoogle :: FilePath -> IO ()
 runBHoogle dbPath = do
-  print dbPath
-  
   chan <- BCh.newBChan 5 -- ^ create a bounded channel for events
 
   -- Send a tick event every 1 seconds with the current time
