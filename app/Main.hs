@@ -25,7 +25,6 @@ import           Control.Concurrent (threadDelay, forkIO)
 import qualified Graphics.Vty as V
 import qualified Graphics.Vty.Input.Events as K
 import           System.FilePath ((</>))
-import qualified System.FilePath as FP
 import qualified System.Directory as Dir
 import qualified Hoogle as H
 
@@ -74,28 +73,20 @@ app = B.App { B.appDraw = drawUI
 
 main :: IO ()
 main = do
-  -- Try use the default hoogle DB. This may not exist because
+  -- Use the default hoogle DB. This may not exist because
   --  1) hoogle generate was never called
   --  2) the system hoogle is a different version from the package used here
   dbPath <- H.defaultDatabaseLocation
   Dir.doesFileExist dbPath >>= \case
     True -> runBHoogle dbPath
     False -> do
-      -- Try find the latest "hoo" DB in the default path
-      let root = FP.takeDirectory dbPath
-      files <- Txt.pack <<$>> getFiles root
-      let hoos = filter (Txt.isSuffixOf ".hoo") files
-
-      case sortBy (flip compare) hoos of
-        (path:_) -> runBHoogle $ Txt.unpack path
-        _ -> do
-          putText ""
-          putText "bhoogle error: "
-          putText "   default hoogle database not found"
-          putText $ "     at " <> Txt.pack dbPath
-          putText "   You can create the database by installing hoogle and running"
-          putText "     hoogle generate"
-          putText ""
+      putText ""
+      putText "bhoogle error: "
+      putText "   default hoogle database not found"
+      putText $ "     at " <> Txt.pack dbPath
+      putText "   You can create the database by installing hoogle and running"
+      putText "     hoogle generate"
+      putText ""
 
  
 runBHoogle :: FilePath -> IO ()
