@@ -1,4 +1,4 @@
-all: build lint
+all: build
 
 .PHONY: setup
 setup:
