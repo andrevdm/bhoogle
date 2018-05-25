@@ -315,7 +315,7 @@ drawUI st =
 
 -- | Reformat the text so that it can be wrapped nicely
 reflow :: Text -> Text
-reflow = Txt.replace "\0" "\n\n" . Txt.replace "\n" "" . Txt.replace "\n\n" "\0" 
+reflow = Txt.replace "\n" " " . Txt.replace "\n\n" "\n" . Txt.replace "\0" "\n"
 
 
 theMap :: BA.AttrMap
