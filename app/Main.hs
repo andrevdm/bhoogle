@@ -30,6 +30,10 @@ import qualified Graphics.Vty.Input.Events as K
 import           System.FilePath ((</>))
 import qualified System.Directory as Dir
 import qualified Hoogle as H
+import qualified System.Process.Typed as PT
+import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString.Lazy.Char8 as BSLC
+import Data.String
 
 
 
@@ -59,6 +63,7 @@ data BrickState = BrickState { _stEditType :: !(BE.Editor Text Name) -- ^ Editor
                              , _stResultsList :: !(BL.List Name H.Target) -- ^ List for the search results
                              , _stSortResults :: SortBy                   -- ^ Current sort order for the results
                              , _stDbPath :: FilePath                      -- ^ Hoogle DB path
+                             , _yankCommand :: Text
                              }
 
 makeLenses ''BrickState
@@ -121,6 +126,7 @@ runBHoogle dbPath = do
                       , _stResults = []
                       , _stSortResults = SortNone
                       , _stDbPath = dbPath
+                      , _yankCommand = "xclip"
                       }
           
   -- And run brick
@@ -200,7 +206,12 @@ handleEvent st ev =
                   let sorter = if sortDir == SortDec then (Lst.sortBy $ flip compareType) else (Lst.sortBy compareType) in
                   B.continue . filterResults $ st & stResults %~ sorter
                                                   & stSortResults .~ sortDir
-
+                K.KChar 'p' -> do
+                  let selected = BL.listSelectedElement $ st ^. stResultsList
+                  B.suspendAndResume (yankPackage st selected)
+                K.KChar 'm' -> do
+                  let selected = BL.listSelectedElement $ st ^. stResultsList
+                  B.suspendAndResume (yankModule st selected)
                 _ -> do
                   -- Let the list handle all other events
                   -- Using handleListEventVi which adds vi-style keybindings for navigation
@@ -219,6 +230,42 @@ handleEvent st ev =
   where
     doSearch st' = 
       liftIO $ searchHoogle (st' ^. stDbPath) (Txt.strip . Txt.concat $ BE.getEditContents (st' ^. stEditType))
+
+yankPackage :: BrickState -> Maybe (Int, H.Target) -> IO BrickState
+yankPackage st selected = do
+  let pkg = case selected of
+        Just (_, target) -> case (H.targetPackage target) of
+          Just pkg' -> Just (fst pkg')
+          _ -> Nothing
+        _ -> Nothing
+
+  case pkg of
+    Just pkg' -> do
+      appendFile "/tmp/haskellDebug.log" (show selected)
+      PT.runProcess_ $
+        PT.setStdin (PT.byteStringInput (stringToBysteStringLazy pkg')) (PT.shell (Txt.unpack $ st ^. yankCommand))
+      return st
+      where
+        stringToBysteStringLazy = BSLC.pack :: String -> BSL.ByteString
+    Nothing -> return st
+
+yankModule :: BrickState -> Maybe (Int, H.Target) -> IO BrickState
+yankModule st selected = do
+  let pkg = case selected of
+        Just (_, target) -> case (H.targetModule target) of
+          Just pkg' -> Just (fst pkg')
+          _ -> Nothing
+        _ -> Nothing
+
+  case pkg of
+    Just pkg' -> do
+      appendFile "/tmp/haskellDebug.log" (show selected)
+      PT.runProcess_ $
+        PT.setStdin (PT.byteStringInput (stringToBysteStringLazy pkg')) (PT.shell (Txt.unpack $ st ^. yankCommand))
+      return st
+      where
+        stringToBysteStringLazy = BSLC.pack :: String -> BSL.ByteString
+    Nothing -> return st
 
 
 -- | Search ahead for type strings longer than 3 chars.
