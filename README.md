@@ -21,6 +21,17 @@
  1. Pressing **'s'** in the results list will toggle the sort order
  1. Escape to exit
  1. Search-ahead is enable for any type search longer than ~3 characters
+ 1. When a result is selected `p` yanks the package name
+ 1. When a result is selected `m` yanks the module name
+
+
+## Settings
+
+Location: ~/.config/bhoogle/bhoogle.conf 
+
+E.g.
+  yank=xclip
+  yankArgs=-selection c
 
 
 Note that the version described in the [blog](http://www.andrevdm.com/posts/2018-01-15-bhoogle.html) is on the [blog](https://github.com/andrevdm/bhoogle/tree/blog) branch.

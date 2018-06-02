@@ -32,9 +32,6 @@ import qualified System.Directory as Dir
 import qualified Hoogle as H
 import qualified System.Process.Typed as PT
 import qualified Data.ByteString.Lazy as BSL
-import qualified Data.ByteString.Lazy.Char8 as BSLC
-import Data.String
-
 
 
 -- | Events that can be sent
@@ -55,15 +52,16 @@ data SortBy = SortNone
 
 
 -- | State of the brick app. Contains the controls and any other required state
-data BrickState = BrickState { _stEditType :: !(BE.Editor Text Name) -- ^ Editor for the type to search for
-                             , _stEditText :: !(BE.Editor Text Name) -- ^ Editor for a text search in the results
-                             , _stTime :: !Tm.LocalTime              -- ^ The current time
-                             , _stFocus :: !(BF.FocusRing Name)      -- ^ Focus ring - a circular list of focusable controls
-                             , _stResults :: [H.Target]              -- ^ The last set of search results from hoohle
+data BrickState = BrickState { _stEditType :: !(BE.Editor Text Name)      -- ^ Editor for the type to search for
+                             , _stEditText :: !(BE.Editor Text Name)      -- ^ Editor for a text search in the results
+                             , _stTime :: !Tm.LocalTime                   -- ^ The current time
+                             , _stFocus :: !(BF.FocusRing Name)           -- ^ Focus ring - a circular list of focusable controls
+                             , _stResults :: [H.Target]                   -- ^ The last set of search results from hoohle
                              , _stResultsList :: !(BL.List Name H.Target) -- ^ List for the search results
                              , _stSortResults :: SortBy                   -- ^ Current sort order for the results
                              , _stDbPath :: FilePath                      -- ^ Hoogle DB path
-                             , _yankCommand :: Text
+                             , _yankCommand :: Text                       -- ^ Command to run to copy text to the clipboard 
+                             , _yankArgs :: Text                          -- ^ Args for the yank command
                              }
 
 makeLenses ''BrickState
@@ -113,9 +111,6 @@ runBHoogle dbPath = do
 
   -- Settings
   settings <- loadSettings
-  let clipper = Map.findWithDefault "xclip" "clipper" settings
-  putText clipper
-  
 
   -- Construct the initial state values
   let st = BrickState { _stEditType = BE.editor TypeSearch (Just 1) ""
@@ -126,7 +121,8 @@ runBHoogle dbPath = do
                       , _stResults = []
                       , _stSortResults = SortNone
                       , _stDbPath = dbPath
-                      , _yankCommand = "xclip"
+                      , _yankCommand = Map.findWithDefault "xclip" "yank" settings
+                      , _yankArgs = Map.findWithDefault "" "yankArgs" settings
                       }
           
   -- And run brick
@@ -231,41 +227,27 @@ handleEvent st ev =
     doSearch st' = 
       liftIO $ searchHoogle (st' ^. stDbPath) (Txt.strip . Txt.concat $ BE.getEditContents (st' ^. stEditType))
 
-yankPackage :: BrickState -> Maybe (Int, H.Target) -> IO BrickState
-yankPackage st selected = do
-  let pkg = case selected of
-        Just (_, target) -> case (H.targetPackage target) of
-          Just pkg' -> Just (fst pkg')
-          _ -> Nothing
-        _ -> Nothing
 
-  case pkg of
-    Just pkg' -> do
-      appendFile "/tmp/haskellDebug.log" (show selected)
-      PT.runProcess_ $
-        PT.setStdin (PT.byteStringInput (stringToBysteStringLazy pkg')) (PT.shell (Txt.unpack $ st ^. yankCommand))
-      return st
-      where
-        stringToBysteStringLazy = BSLC.pack :: String -> BSL.ByteString
-    Nothing -> return st
+yank :: (H.Target -> Maybe Text) -> BrickState -> Maybe (Int, H.Target) -> IO BrickState
+yank getText st selected = 
+  case getText <<$>> selected of
+    Just (_, Just s') -> do
+      let cmd = (st ^. yankCommand) <> " " <> (st ^. yankArgs)
+      PT.runProcess_ $ PT.setStdin (PT.byteStringInput (BSL.fromStrict . TxtE.encodeUtf8 $ s')) (PT.shell (Txt.unpack cmd))
+      pure st
+
+    _ ->
+      pure st
+
+
+yankPackage :: BrickState -> Maybe (Int, H.Target) -> IO BrickState
+yankPackage st selected = 
+  yank (\t -> Txt.pack . fst <$> H.targetPackage t) st selected
+
 
 yankModule :: BrickState -> Maybe (Int, H.Target) -> IO BrickState
-yankModule st selected = do
-  let pkg = case selected of
-        Just (_, target) -> case (H.targetModule target) of
-          Just pkg' -> Just (fst pkg')
-          _ -> Nothing
-        _ -> Nothing
-
-  case pkg of
-    Just pkg' -> do
-      appendFile "/tmp/haskellDebug.log" (show selected)
-      PT.runProcess_ $
-        PT.setStdin (PT.byteStringInput (stringToBysteStringLazy pkg')) (PT.shell (Txt.unpack $ st ^. yankCommand))
-      return st
-      where
-        stringToBysteStringLazy = BSLC.pack :: String -> BSL.ByteString
-    Nothing -> return st
+yankModule st selected = 
+  yank (\t -> Txt.pack . fst <$> H.targetModule t) st selected
 
 
 -- | Search ahead for type strings longer than 3 chars.
@@ -398,7 +380,7 @@ compareType a b =
   
 -- | Search hoogle using the default hoogle database
 searchHoogle :: FilePath -> Text -> IO [H.Target]
-searchHoogle path f = do
+searchHoogle path f = 
   H.withDatabase path (\x -> pure $ H.searchDatabase x (Txt.unpack f))
   
 
@@ -449,7 +431,7 @@ loadSettings = do
     False ->
       pure Map.empty
 
-saveSettings :: (Map Text Text) -> IO ()
+saveSettings :: Map Text Text -> IO ()
 saveSettings settings = do
   p <- getSettingsFilePath
   let ss = Txt.intercalate "\n" $ (\(k, v) -> k <> "=" <> v) <$> Map.toList settings
