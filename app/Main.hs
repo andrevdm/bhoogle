@@ -8,9 +8,12 @@ module Main where
 import           Protolude
 import           Control.Lens ((^.), (.~), (%~))
 import           Control.Lens.TH (makeLenses)
+import qualified Data.Map as Map
 import qualified Data.List as Lst
 import qualified Data.Time as Tm
 import qualified Data.Text as Txt
+import qualified Data.Text.Encoding as TxtE
+import qualified Data.ByteString as BS
 import qualified Data.Vector as Vec
 import           Brick ((<+>), (<=>))
 import qualified Brick as B
@@ -102,6 +105,12 @@ runBHoogle dbPath = do
 
   -- Initial current time value
   t <- getTime
+
+  -- Settings
+  settings <- loadSettings
+  let clipper = Map.findWithDefault "xclip" "clipper" settings
+  putText clipper
+  
 
   -- Construct the initial state values
   let st = BrickState { _stEditType = BE.editor TypeSearch (Just 1) ""
@@ -375,3 +384,39 @@ stripTags []         = []
 stripTags ('<' : xs) = stripTags $ drop 1 $ dropWhile (/= '>') xs
 stripTags (x : xs)   = x : stripTags xs
 
+----------------------------------------------------------------------------------------------------
+
+loadSettings :: IO (Map Text Text)
+loadSettings = do
+  p <- getSettingsFilePath
+
+  Dir.doesFileExist p >>= \case
+    True -> do
+      cfgLines1 <- Txt.lines . TxtE.decodeUtf8 <$> BS.readFile p
+      let cfgLines2 = Txt.strip <$> cfgLines1
+      let cfgLines3 = filter (not . Txt.isPrefixOf "#") cfgLines2
+      let cfg1 = Txt.breakOn "=" <$> cfgLines3
+      let cfg2 = filter (not . Txt.null . snd) cfg1
+      let cfg3 = (\(k, v) -> (Txt.strip k, Txt.strip . Txt.drop 1 $ v)) <$> cfg2
+      pure $ Map.fromList cfg3
+    False ->
+      pure Map.empty
+
+saveSettings :: (Map Text Text) -> IO ()
+saveSettings settings = do
+  p <- getSettingsFilePath
+  let ss = Txt.intercalate "\n" $ (\(k, v) -> k <> "=" <> v) <$> Map.toList settings
+  BS.writeFile p . TxtE.encodeUtf8 $ ss
+
+
+getSettingsFilePath :: IO FilePath
+getSettingsFilePath = do
+  p <- getSettingsRootPath
+  pure $ p </> "bhoogle.conf"
+
+
+getSettingsRootPath :: IO FilePath
+getSettingsRootPath = do
+  p <- Dir.getXdgDirectory Dir.XdgConfig "bhoogle"
+  Dir.createDirectoryIfMissing True p
+  pure p
