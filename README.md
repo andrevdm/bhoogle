@@ -13,7 +13,7 @@
    1. Generate the default database (```hoogle generate```)
 
 ## Usage
- 1. Enter a search in the "type" edit box
+ 1. Enter a string in the "Type" edit box. You can filter the results to specific packages appending the `+packagename` syntax just like with Hoogle.
  1. Press enter to search: focus goes directly to the results list
  1. Or press tab to search and focus will go to the "text" edit box
  1. You can then filter the results by typing in the "text" edit box, any result containing the sub-string typed will be shown
