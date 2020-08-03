@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -24,7 +25,9 @@ import qualified Brick.Widgets.List as BL
 import qualified Brick.Widgets.Edit as BE
 import qualified Brick.Widgets.Border as BB
 import qualified Brick.Widgets.Border.Style as BBS
+#if !MIN_VERSION_base(4,13,0)
 import           Control.Concurrent (threadDelay, forkIO)
+#endif
 import qualified Graphics.Vty as V
 import qualified Graphics.Vty.Input.Events as K
 import           System.FilePath ((</>))
@@ -124,9 +127,10 @@ runBHoogle dbPath = do
                       , _yankCommand = Map.findWithDefault "xclip" "yank" settings
                       , _yankArgs = Map.findWithDefault "" "yankArgs" settings
                       }
-          
+
   -- And run brick
-  void $ B.customMain (V.mkVty V.defaultConfig) (Just chan) app st
+  vty <- V.mkVty V.defaultConfig
+  void $ B.customMain vty (V.mkVty V.defaultConfig) (Just chan) app st
 
   where
     -- | Get the local time
