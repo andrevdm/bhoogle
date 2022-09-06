@@ -1,21 +1,15 @@
-all: build
+package = bhoogle
+exe = bhoogle
 
-.PHONY: setup
-setup:
-	stack setup
-	stack build --dependencies-only --no-run-tests
-	stack install hlint weeder
+run:
+	cabal run $(exe)
 
-.PHONY: build
 build:
-	stack build --pedantic --no-run-tests
+	cabal build $(package) --ghc-options "-j6 +RTS -A128m -n2m -qg -RTS"
 
-.PHONY: lint
-lint:
-	hlint .
-	weeder .
+build-fast:
+	cabal build $(package) --disable-optimisation --ghc-options "-O0 -j6 +RTS -A128m -n2m -qg -RTS"
 
-.PHONY: check-nightly
-check-nightly:
-	stack setup --resolver nightly
-	stack build --resolver nightly --pedantic
+ghcid:
+	ghcid --lint -c "cabal repl --repl-options='-ignore-dot-ghci' --repl-options='-fobject-code' --repl-options='-fno-warn-unused-do-bind' --repl-options='-j6' "
+

@@ -69,10 +69,11 @@ makeLenses ''BrickState
 
 -- | Defines how the brick application will work / handle events
 app :: B.App BrickState Event Name
-app = B.App { B.appDraw = drawUI
+app =
+  B.App { B.appDraw = drawUI
             , B.appChooseCursor = B.showFirstCursor
             , B.appHandleEvent = handleEvent
-            , B.appStartEvent = pure
+            , B.appStartEvent = pass
             , B.appAttrMap = const theMap
             }
 
@@ -126,7 +127,10 @@ runBHoogle dbPath = do
                       }
           
   -- And run brick
-  void $ B.customMain (V.mkVty V.defaultConfig) (Just chan) app st
+  let vtyBuilder = V.mkVty V.defaultConfig
+  initialVty <- vtyBuilder
+
+  void $ B.customMain initialVty vtyBuilder (Just chan) app st
 
   where
     -- | Get the local time
@@ -137,8 +141,8 @@ runBHoogle dbPath = do
 
 
 -- | Main even handler for brick events
-handleEvent :: BrickState -> B.BrickEvent Name Event -> B.EventM Name (B.Next BrickState)
-handleEvent st ev =
+handleEvent :: B.BrickEvent Name Event -> B.EventM Name BrickState ()
+handleEvent ev =
   case ev of
     -- Handle keyboard events
     --   k is the key
@@ -146,86 +150,89 @@ handleEvent st ev =
     (B.VtyEvent ve@(V.EvKey k ms)) ->
       case (k, ms) of
         -- Escape quits the app, no matter what control has focus
-        (K.KEsc, []) -> B.halt st
+        (K.KEsc, []) -> B.halt
 
-        _ ->
+        _ -> do
+          st' <- get
           -- How to interpret the key press depends on which control is focused
-          case BF.focusGetCurrent $ st ^. stFocus of
+          case BF.focusGetCurrent $ st' ^. stFocus of
             Just TypeSearch ->
               case k of
                 K.KChar '\t' -> do
                   -- Search, clear sort order, focus next
-                  found <- doSearch st
-                  B.continue . filterResults $ st & stFocus %~ BF.focusNext
+                  found <- liftIO $ doSearch st'
+                  modify $ \st -> filterResults $ st & stFocus %~ BF.focusNext
                                                   & stResults .~ found
                                                   & stSortResults .~ SortNone
 
                 K.KBackTab ->do
                   -- Search, clear sort order, focus prev
-                  found <- doSearch st
-                  B.continue  . filterResults $ st & stFocus %~ BF.focusPrev
+                  found <- liftIO $ doSearch st'
+                  modify $ \st -> filterResults $ st & stFocus %~ BF.focusPrev
                                                    & stResults .~ found
                                                    & stSortResults .~ SortNone
 
                 K.KEnter -> do
                   -- Search, clear sort order, focus on results
                   --  This makes it faster if you want to search and navigate results without tabing through the text search box
-                  found <- doSearch st
-                  B.continue . filterResults $ st & stResults .~ found
+                  found <- liftIO $ doSearch st'
+                  modify $ \st -> filterResults $ st & stResults .~ found
                                                   & stSortResults .~ SortNone
                                                   & stFocus %~ BF.focusNext & stFocus %~ BF.focusNext
                                                   -- TODO with brick >= 0.33, rather than 2x focus next: & stFocus %~ BF.focusSetCurrent ListResults
 
                 _ -> do
                   -- Let the editor handle all other events
-                  r <- BE.handleEditorEvent ve $ st ^. stEditType
-                  next <- liftIO . searchAhead doSearch $ st & stEditType .~ r 
-                  B.continue next
+                  B.zoom stEditType $ BE.handleEditorEvent ev
+                  st <- get
+                  st2 <- liftIO $ searchAhead doSearch st
+                  put st2
 
 
             Just TextSearch ->
               case k of
-                K.KChar '\t' -> B.continue $ st & stFocus %~ BF.focusNext -- Focus next
-                K.KBackTab -> B.continue $ st & stFocus %~ BF.focusPrev   -- Focus previous
+                K.KChar '\t' -> modify $ \st -> st & stFocus %~ BF.focusNext -- Focus next
+                K.KBackTab -> modify $ \st -> st & stFocus %~ BF.focusPrev   -- Focus previous
                 _ -> do
                   -- Let the editor handle all other events
-                  r <- BE.handleEditorEvent ve $ st ^. stEditText
-                  B.continue . filterResults $ st & stEditText .~ r
+                  B.zoom stEditText $ BE.handleEditorEvent ev
+                  modify filterResults
+
 
             Just ListResults ->
               case k of
-                K.KChar '\t' -> B.continue $ st & stFocus %~ BF.focusNext -- Focus next
-                K.KBackTab -> B.continue $ st & stFocus %~ BF.focusPrev   -- Focus previous
+                K.KChar '\t' -> modify $ \st -> st & stFocus %~ BF.focusNext -- Focus next
+                K.KBackTab -> modify $ \st -> st & stFocus %~ BF.focusPrev   -- Focus previous
                 K.KChar 's' ->
                   -- Toggle the search order between ascending and descending, use asc if sort order was 'none'
-                  let sortDir = if (st ^. stSortResults) == SortAsc then SortDec else SortAsc in
-                  let sorter = if sortDir == SortDec then (Lst.sortBy $ flip compareType) else (Lst.sortBy compareType) in
-                  B.continue . filterResults $ st & stResults %~ sorter
-                                                  & stSortResults .~ sortDir
+                  let sortDir = if (st' ^. stSortResults) == SortAsc then SortDec else SortAsc in
+                  let sorter = if sortDir == SortDec then Lst.sortBy (flip compareType) else Lst.sortBy compareType in
+                  modify $ \st -> filterResults $ st & stResults %~ sorter
+                                                     & stSortResults .~ sortDir
                 K.KChar 'p' -> do
-                  let selected = BL.listSelectedElement $ st ^. stResultsList
-                  B.suspendAndResume (yankPackage st selected)
+                  let selected = BL.listSelectedElement $ st' ^. stResultsList
+                  B.suspendAndResume (yankPackage st' selected)
                 K.KChar 'm' -> do
-                  let selected = BL.listSelectedElement $ st ^. stResultsList
-                  B.suspendAndResume (yankModule st selected)
+                  let selected = BL.listSelectedElement $ st' ^. stResultsList
+                  B.suspendAndResume (yankModule st' selected)
                 _ -> do
                   -- Let the list handle all other events
                   -- Using handleListEventVi which adds vi-style keybindings for navigation
                   --  and the standard handleListEvent as a fallback for all other events
-                  r <- BL.handleListEventVi BL.handleListEvent ve $ st ^. stResultsList
-                  B.continue $ st & stResultsList .~ r
+                  B.zoom stResultsList $ BL.handleListEventVi BL.handleListEvent ve
 
-            _ -> B.continue st
+            _ -> pass
 
     (B.AppEvent (EventUpdateTime time)) ->
       -- Update the time in the state
-      B.continue $ st & stTime .~ time
+      modify $ \st -> st & stTime .~ time
       
-    _ -> B.continue st
+    _ -> pass
 
   where
+    doSearch :: BrickState -> IO [H.Target]
     doSearch st' = 
-      liftIO $ searchHoogle (st' ^. stDbPath) (Txt.strip . Txt.concat $ BE.getEditContents (st' ^. stEditType))
+      searchHoogle (st' ^. stDbPath) (Txt.strip . Txt.concat $ BE.getEditContents (st' ^. stEditType))
 
 
 yank :: (H.Target -> Maybe Text) -> BrickState -> Maybe (Int, H.Target) -> IO BrickState
@@ -276,7 +283,7 @@ filterResults st =
   let results =
         if Txt.null filterText
         then allResults
-        else filter (\t -> Txt.isInfixOf filterText . Txt.toLower $ formatResult t) allResults
+        else filter (Txt.isInfixOf filterText . Txt.toLower . formatResult) allResults
   in
   st & stResultsList .~ BL.list ListResults (Vec.fromList results) 1
   
@@ -295,7 +302,7 @@ drawUI st =
     resultsBlock =
       let total = show . length $ st ^. stResults in
       let showing = show . length $ st ^. stResultsList ^. BL.listElementsL in
-      (B.withAttr "infoTitle" $ B.txt "Results: ") <+> B.txt (showing <> "/" <> total)
+      (B.withAttr (B.attrName "infoTitle") $ B.txt "Results: ") <+> B.txt (showing <> "/" <> total)
       <=>
       (B.padTop (B.Pad 1) $
        resultsContent <+> resultsDetail
@@ -328,11 +335,11 @@ drawUI st =
 
     htitle t =
       B.hLimit 20 $
-      B.withAttr "infoTitle" $
+      B.withAttr (B.attrName "infoTitle") $
       B.txt t
       
     vtitle t =
-      B.withAttr "infoTitle" $
+      B.withAttr (B.attrName "infoTitle") $
       B.txt t
 
     editor n e =
@@ -342,7 +349,7 @@ drawUI st =
     time t =
       B.padLeft (B.Pad 1) $
       B.hLimit 20 $
-      B.withAttr "time" $
+      B.withAttr (B.attrName "time") $
       B.str (Tm.formatTime Tm.defaultTimeLocale "%H-%M-%S" t)
 
     getSelectedDetail fn =
@@ -357,18 +364,18 @@ reflow = Txt.replace "\n" " " . Txt.replace "\n\n" "\n" . Txt.replace "\0" "\n"
 
 
 theMap :: BA.AttrMap
-theMap = BA.attrMap V.defAttr [ (BE.editAttr        , V.black `B.on` V.cyan)
-                              , (BE.editFocusedAttr , V.black `B.on` V.yellow)
-                              , (BL.listAttr        , V.white `B.on` V.blue)
-                              , (BL.listSelectedAttr, V.blue `B.on` V.white)
-                              , ("infoTitle"        , B.fg V.cyan)
-                              , ("time"             , B.fg V.yellow)
+theMap = BA.attrMap V.defAttr [ (BE.editAttr           , V.black `B.on` V.cyan)
+                              , (BE.editFocusedAttr    , V.black `B.on` V.yellow)
+                              , (BL.listAttr           , V.white `B.on` V.blue)
+                              , (BL.listSelectedAttr   , V.blue `B.on` V.white)
+                              , (B.attrName "infoTitle", B.fg V.cyan)
+                              , (B.attrName "time"     , B.fg V.yellow)
                               ]
 
 
 getFiles :: FilePath -> IO [FilePath]
 getFiles p = do
-  entries <- (p </>) <<$>> (Dir.listDirectory p)
+  entries <- (p </>) <<$>> Dir.listDirectory p
   filterM Dir.doesFileExist entries
 
 ----------------------------------------------------------------------------------------------
