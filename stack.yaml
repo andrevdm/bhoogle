@@ -1,0 +1,7 @@
+resolver: lts-22.13
+
+packages:
+  - .
+
+extra-deps:
+  - hoogle-5.0.18.4
