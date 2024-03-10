@@ -24,9 +24,10 @@ import qualified Brick.Widgets.List as BL
 import qualified Brick.Widgets.Edit as BE
 import qualified Brick.Widgets.Border as BB
 import qualified Brick.Widgets.Border.Style as BBS
-import           Control.Concurrent (threadDelay, forkIO)
 import qualified Graphics.Vty as V
 import qualified Graphics.Vty.Input.Events as K
+import qualified Graphics.Vty.CrossPlatform
+import qualified Graphics.Vty.Config
 import           System.FilePath ((</>))
 import qualified System.Directory as Dir
 import qualified Hoogle as H
@@ -60,7 +61,7 @@ data BrickState = BrickState { _stEditType :: !(BE.Editor Text Name)      -- ^ E
                              , _stResultsList :: !(BL.List Name H.Target) -- ^ List for the search results
                              , _stSortResults :: SortBy                   -- ^ Current sort order for the results
                              , _stDbPath :: FilePath                      -- ^ Hoogle DB path
-                             , _yankCommand :: Text                       -- ^ Command to run to copy text to the clipboard 
+                             , _yankCommand :: Text                       -- ^ Command to run to copy text to the clipboard
                              , _yankArgs :: Text                          -- ^ Args for the yank command
                              }
 
@@ -95,7 +96,7 @@ main = do
       putText "     hoogle generate"
       putText ""
 
- 
+
 runBHoogle :: FilePath -> IO ()
 runBHoogle dbPath = do
   chan <- BCh.newBChan 5 -- ^ create a bounded channel for events
@@ -103,7 +104,7 @@ runBHoogle dbPath = do
   -- Send a tick event every 1 seconds with the current time
   -- Brick will send this to our event handler which can then update the stTime field
   void . forkIO $ forever $ do
-    t <- getTime 
+    t <- getTime
     BCh.writeBChan chan $ EventUpdateTime t
     threadDelay $ 1 * 1000000
 
@@ -125,9 +126,9 @@ runBHoogle dbPath = do
                       , _yankCommand = Map.findWithDefault "xclip" "yank" settings
                       , _yankArgs = Map.findWithDefault "" "yankArgs" settings
                       }
-          
+
   -- And run brick
-  let vtyBuilder = V.mkVty V.defaultConfig
+  let vtyBuilder = Graphics.Vty.CrossPlatform.mkVty Graphics.Vty.Config.defaultConfig
   initialVty <- vtyBuilder
 
   void $ B.customMain initialVty vtyBuilder (Just chan) app st
@@ -226,17 +227,17 @@ handleEvent ev =
     (B.AppEvent (EventUpdateTime time)) ->
       -- Update the time in the state
       modify $ \st -> st & stTime .~ time
-      
+
     _ -> pass
 
   where
     doSearch :: BrickState -> IO [H.Target]
-    doSearch st' = 
+    doSearch st' =
       searchHoogle (st' ^. stDbPath) (Txt.strip . Txt.concat $ BE.getEditContents (st' ^. stEditType))
 
 
 yank :: (H.Target -> Maybe Text) -> BrickState -> Maybe (Int, H.Target) -> IO BrickState
-yank getText st selected = 
+yank getText st selected =
   case getText <<$>> selected of
     Just (_, Just s') -> do
       let cmd = (st ^. yankCommand) <> " " <> (st ^. yankArgs)
@@ -248,12 +249,12 @@ yank getText st selected =
 
 
 yankPackage :: BrickState -> Maybe (Int, H.Target) -> IO BrickState
-yankPackage st selected = 
+yankPackage st selected =
   yank (\t -> Txt.pack . fst <$> H.targetPackage t) st selected
 
 
 yankModule :: BrickState -> Maybe (Int, H.Target) -> IO BrickState
-yankModule st selected = 
+yankModule st selected =
   yank (\t -> Txt.pack . fst <$> H.targetModule t) st selected
 
 
@@ -286,19 +287,19 @@ filterResults st =
         else filter (Txt.isInfixOf filterText . Txt.toLower . formatResult) allResults
   in
   st & stResultsList .~ BL.list ListResults (Vec.fromList results) 1
-  
+
 
 -- | Draw the UI
 drawUI :: BrickState -> [B.Widget Name]
 drawUI st =
-  [B.padAll 1 contentBlock] 
+  [B.padAll 1 contentBlock]
 
   where
     contentBlock =
       (B.withBorderStyle BBS.unicode $ BB.border searchBlock)
       <=>
       B.padTop (B.Pad 1) resultsBlock
-      
+
     resultsBlock =
       let total = show . length $ st ^. stResults in
       let showing = show . length $ st ^. stResultsList ^. BL.listElementsL in
@@ -327,7 +328,7 @@ drawUI st =
       B.padLeft (B.Pad 2) (B.txtWrap . reflow $ getSelectedDetail (Txt.pack . clean . H.targetDocs))
       <=>
       B.fill ' '
-  
+
     searchBlock =
       ((htitle "Type: " <+> editor TypeSearch (st ^. stEditType)) <+> time (st ^. stTime))
       <=>
@@ -337,7 +338,7 @@ drawUI st =
       B.hLimit 20 $
       B.withAttr (B.attrName "infoTitle") $
       B.txt t
-      
+
     vtitle t =
       B.withAttr (B.attrName "infoTitle") $
       B.txt t
@@ -384,12 +385,12 @@ compareType :: H.Target -> H.Target -> Ordering
 compareType a b =
   compare (formatResult a) (formatResult b)
 
-  
+
 -- | Search hoogle using the default hoogle database
 searchHoogle :: FilePath -> Text -> IO [H.Target]
-searchHoogle path f = 
+searchHoogle path f =
   H.withDatabase path (\x -> pure $ H.searchDatabase x (Txt.unpack f))
-  
+
 
 -- | Format the hoogle results so they roughly match what the terminal app would show
 formatResult :: H.Target -> Text
@@ -397,7 +398,7 @@ formatResult t =
   let typ = clean $ H.targetItem t in
   let m = (clean . fst) <$> H.targetModule t in
   Txt.pack $ fromMaybe "" m <> " :: " <> typ
-  
+
 
 clean :: [Char] -> [Char]
 clean = unescapeHTML . stripTags
@@ -412,7 +413,7 @@ unescapeHTML ('&':xs)
     | Just x <- Lst.stripPrefix "quot;" xs = '\"' : unescapeHTML x
 unescapeHTML (x:xs) = x : unescapeHTML xs
 unescapeHTML [] = []
-  
+
 
 -- | From hakyll source: https://hackage.haskell.org/package/hakyll-4.1.2.1/docs/src/Hakyll-Web-Html.html#stripTags
 stripTags :: [Char] -> [Char]

@@ -1,6 +1,6 @@
 cabal-version:       2.2
 name:                bhoogle
-version:             0.1.4.2
+version:             0.1.4.3
 synopsis:            Simple terminal GUI for local hoogle.
 description:         bhoogle is a terminal GUI layer over local hoogle. It provides search ahead and sub-string filtering in addition to the usual type-search.
 homepage:            https://github.com/andrevdm/bhoogle#readme
@@ -8,7 +8,7 @@ license:             BSD-3-Clause OR Apache-2.0
 license-file:        LICENSE
 author:              Andre Van Der Merwe
 maintainer:          andre@andrevdm.com
-copyright:           2018-2022 Andre Van Der Merwe
+copyright:           2018-2024 Andre Van Der Merwe
 category:            Development, Terminal
 build-type:          Simple
 extra-source-files:  README.md
@@ -24,8 +24,9 @@ executable bhoogle
                      , directory
                      , filepath
                      , containers
-                     , brick >= 1.1
-                     , vty >= 5.3.6
+                     , brick >= 2.1
+                     , vty >= 6.0
+                     , vty-crossplatform
                      , vector
                      , process
                      , lens
