@@ -5,7 +5,7 @@
 
 module Main where
 
-import           Protolude
+import           Verset -- replacing protolude until it works with GHC 9.12+
 import           Control.Lens ((^.), (.~), (%~))
 import           Control.Lens.TH (makeLenses)
 import qualified Data.Map as Map
@@ -154,7 +154,7 @@ handleEvent ev =
         (K.KEsc, []) -> B.halt
 
         _ -> do
-          st' <- get
+          st' <- B.get
           -- How to interpret the key press depends on which control is focused
           case BF.focusGetCurrent $ st' ^. stFocus of
             Just TypeSearch ->
@@ -162,14 +162,14 @@ handleEvent ev =
                 K.KChar '\t' -> do
                   -- Search, clear sort order, focus next
                   found <- liftIO $ doSearch st'
-                  modify $ \st -> filterResults $ st & stFocus %~ BF.focusNext
+                  B.modify $ \st -> filterResults $ st & stFocus %~ BF.focusNext
                                                   & stResults .~ found
                                                   & stSortResults .~ SortNone
 
                 K.KBackTab ->do
                   -- Search, clear sort order, focus prev
                   found <- liftIO $ doSearch st'
-                  modify $ \st -> filterResults $ st & stFocus %~ BF.focusPrev
+                  B.modify $ \st -> filterResults $ st & stFocus %~ BF.focusPrev
                                                    & stResults .~ found
                                                    & stSortResults .~ SortNone
 
@@ -177,7 +177,7 @@ handleEvent ev =
                   -- Search, clear sort order, focus on results
                   --  This makes it faster if you want to search and navigate results without tabing through the text search box
                   found <- liftIO $ doSearch st'
-                  modify $ \st -> filterResults $ st & stResults .~ found
+                  B.modify $ \st -> filterResults $ st & stResults .~ found
                                                   & stSortResults .~ SortNone
                                                   & stFocus %~ BF.focusNext & stFocus %~ BF.focusNext
                                                   -- TODO with brick >= 0.33, rather than 2x focus next: & stFocus %~ BF.focusSetCurrent ListResults
@@ -185,30 +185,30 @@ handleEvent ev =
                 _ -> do
                   -- Let the editor handle all other events
                   B.zoom stEditType $ BE.handleEditorEvent ev
-                  st <- get
+                  st <- B.get
                   st2 <- liftIO $ searchAhead doSearch st
-                  put st2
+                  B.put st2
 
 
             Just TextSearch ->
               case k of
-                K.KChar '\t' -> modify $ \st -> st & stFocus %~ BF.focusNext -- Focus next
-                K.KBackTab -> modify $ \st -> st & stFocus %~ BF.focusPrev   -- Focus previous
+                K.KChar '\t' -> B.modify $ \st -> st & stFocus %~ BF.focusNext -- Focus next
+                K.KBackTab -> B.modify $ \st -> st & stFocus %~ BF.focusPrev   -- Focus previous
                 _ -> do
                   -- Let the editor handle all other events
                   B.zoom stEditText $ BE.handleEditorEvent ev
-                  modify filterResults
+                  B.modify filterResults
 
 
             Just ListResults ->
               case k of
-                K.KChar '\t' -> modify $ \st -> st & stFocus %~ BF.focusNext -- Focus next
-                K.KBackTab -> modify $ \st -> st & stFocus %~ BF.focusPrev   -- Focus previous
+                K.KChar '\t' -> B.modify $ \st -> st & stFocus %~ BF.focusNext -- Focus next
+                K.KBackTab -> B.modify $ \st -> st & stFocus %~ BF.focusPrev   -- Focus previous
                 K.KChar 's' ->
                   -- Toggle the search order between ascending and descending, use asc if sort order was 'none'
                   let sortDir = if (st' ^. stSortResults) == SortAsc then SortDec else SortAsc in
                   let sorter = if sortDir == SortDec then Lst.sortBy (flip compareType) else Lst.sortBy compareType in
-                  modify $ \st -> filterResults $ st & stResults %~ sorter
+                  B.modify $ \st -> filterResults $ st & stResults %~ sorter
                                                      & stSortResults .~ sortDir
                 K.KChar 'p' -> do
                   let selected = BL.listSelectedElement $ st' ^. stResultsList
@@ -226,7 +226,7 @@ handleEvent ev =
 
     (B.AppEvent (EventUpdateTime time)) ->
       -- Update the time in the state
-      modify $ \st -> st & stTime .~ time
+      B.modify $ \st -> st & stTime .~ time
 
     _ -> pass
 
