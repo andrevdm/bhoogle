@@ -33,7 +33,7 @@ executable bhoogle
                      , typed-process >= 0.2.12 && < 0.3
                      , vector >= 0.13.2 && < 0.14
                      , vty >= 6.2 && < 6.6
-                     , vty-crossplatform >= 0.4.0 && < 0.5
+                     , vty-crossplatform >= 0.4.0 && < 0.6
   default-language:    Haskell2010
 
 source-repository head
