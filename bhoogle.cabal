@@ -29,7 +29,7 @@ executable bhoogle
                      , lens >= 5.3.4 && < 5.4
                      , process >= 1.6.2 && < 1.7
                      , text >= 2.1.1 && < 2.2
-                     , time >= 1.12.2 && < 1.15
+                     , time >= 1.12.2 && < 1.16
                      , typed-process >= 0.2.12 && < 0.3
                      , vector >= 0.13.2 && < 0.14
                      , vty >= 6.2 && < 6.6
